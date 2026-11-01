@@ -1,0 +1,502 @@
+# Trabalho prático: métodos estatísticos de previsão a partir de séries temporais
+
+**Informações da série selecionada:**
+
+Casos mensais de **diagnóstico de alguns cânceres ginecológicos** (CID C51 a C54 e C56) de **janeiro/2015 a dezembro/2024 no Hospital Luxemburgo/Instituto Mário Penna**
+
+## Pacotes
+
+```{r}
+# install.packages(c("tidyverse", "knitr", "kableExtra", "patchwork", "forecast", "tseries"))
+
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+library(forecast)
+library(tseries)
+```
+
+## Bloco 0: análise exploratória
+
+### Preparação e definições:
+
+```{r}
+# Entrada de dados
+dados <- read.csv("C:/Users/isabe/Downloads/mario_penna/mario_penna/estimativas/serie_casos_diagnostico_cancer_ginecologico_C51_a_C58_mensal_2015_2024_tratada.csv")
+
+vulva <- dados %>%
+  select(mes_ano_diag, diag_vulva)
+
+y <- ts(vulva$diag_vulva, start = c(2015, 1), frequency = 12)
+
+View(vulva)
+```
+
+Definindo tema padrão para o relatório:
+
+```{r}
+# Tema padrão
+tema_relatorio <- theme_bw(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(colour = "grey90"),
+    plot.title       = element_text(face = "bold", size = 13),
+    plot.subtitle    = element_text(colour = "grey30", size = 10),
+    legend.position  = "bottom",
+    axis.title       = element_text(face = "bold")
+  )
+```
+
+### Treino (80%) e teste (20%)
+
+Como são 120 observações (12 meses em cada um dos 10 anos), serão 96 observações para treino e 24 para teste.
+
+```{r}
+n <- length(y)
+n_teste  <- round(floor(0.2 * n), 0)
+n_treino <- n - n_teste
+
+treino <- window(y, end   = time(y)[n_treino])
+teste  <- window(y, start = time(y)[n_treino + 1])
+
+formatar_data_ts <- function(serie_ts, posicao = c("inicio", "fim")) {
+  posicao <- match.arg(posicao)
+  if (posicao == "inicio") {
+    t <- time(serie_ts)[1]
+  } else {
+    t <- time(serie_ts)[length(serie_ts)]
+  }
+  data <- as.Date(sprintf("%d-%02d-01", floor(t), round((t - floor(t)) * 12) + 1))
+  format(data, "%b/%Y")
+}
+
+# Resumo da divisão
+divisao <- tibble(
+  Conjunto = c("Treino", "Teste", "Total"),
+  Observações = c(n_treino, n_teste, n),
+  Início  = c(formatar_data_ts(treino, "inicio"),
+                  formatar_data_ts(teste,  "inicio"),
+                  formatar_data_ts(y,      "inicio")),
+  Fim = c(formatar_data_ts(treino, "fim"),
+                  formatar_data_ts(teste,  "fim"),
+                  formatar_data_ts(y,      "fim"))
+)
+
+# Tabela formatada
+kable(divisao,
+      caption = "Divisão da série temporal em treino e teste",
+      col.names = c("Conjunto", "Observações", "Início", "Fim")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                position = "center")
+```
+
+### Análise exploratória
+
+#### Síntese numérica
+
+```{r}
+# Preparação
+x    <- as.numeric(y) # vetor numérico
+ano  <- floor(time(y)) # ano de cada observação
+mes  <- factor(cycle(y), levels = 1:12,
+               labels = c("Jan","Fev","Mar","Abr","Mai","Jun",
+                          "Jul","Ago","Set","Out","Nov","Dez"))
+tempo <- as.numeric(time(y))
+n     <- length(x)
+
+# Data frame
+vulva <- tibble(
+  tempo = as.numeric(time(y)),
+  ano   = floor(tempo),
+  mes   = factor(cycle(y), levels = 1:12, 
+                 labels = c("Jan","Fev","Mar","Abr","Mai","Jun",
+                            "Jul","Ago","Set","Out","Nov","Dez")),
+  x     = as.numeric(y)
+) %>%
+  mutate(
+    data = as.Date(sprintf("%d-%02d-01", ano, round((tempo - ano) * 12) + 1)),
+    z = (x - mean(x)) / sd(x),
+    percentil = round(ecdf(x)(x) * 100, 1)
+  )
+
+
+# 1. Medidas de tendência central
+
+media   <- round(mean(x), 2)
+mediana <- round(median(x), 2)
+
+moda_fun <- function(v) {
+  freq <- table(v)
+  as.numeric(names(freq)[freq == max(freq)])
+}
+moda <- moda_fun(x)   # pode retornar mais de uma moda
+
+tendencia <- tibble(
+  Estatística = c("Média", "Mediana", "Moda"),
+  Valor       = c(media, mediana, paste(moda, collapse = "; "))
+)
+
+
+# 2. Medidas de variabilidade
+
+amplitude  <- max(x) - min(x)
+variancia  <- round(var(x), 2)
+desvio     <- round(sd(x), 2)
+cv         <- round(desvio / media * 100, 2)
+
+classif_cv <- cut(cv,
+                  breaks = c(0, 15, 30, Inf),
+                  labels = c("baixa", "média", "alta"),
+                  right  = FALSE)
+
+# CV por ano
+cv_por_ano <- vulva %>%
+  group_by(ano) %>%
+  summarise(
+    Média = mean(x),
+    DP    = sd(x),
+    CV_pct = DP / Média * 100,
+    .groups = "drop"
+  ) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+
+
+# 3. Medidas de posição
+
+quartis <- quantile(x, c(0.25, 0.50, 0.75))
+decis   <- quantile(x, seq(0.1, 0.9, 0.1))
+percent <- quantile(x, c(0.01, 0.05, 0.10, 0.90, 0.95, 0.99))
+iqr     <- IQR(x)
+
+# Percentil empírico e escore z
+vulva <- vulva %>%
+  mutate(
+    percentil = round(ecdf(x)(x) * 100, 1),
+    z         = (x - media) / desvio
+  )
+
+
+# 4. Outliers
+
+# Cercas de Tukey
+cercas <- c(
+  inf = unname(quartis[1] - 1.5 * iqr),
+  sup = unname(quartis[3] + 1.5 * iqr)
+)
+
+bp <- boxplot.stats(x)
+outliers_tukey <- vulva %>% filter(x %in% bp$out)
+outliers_z2    <- vulva %>% filter(abs(z) > 2)
+outliers_z3    <- vulva %>% filter(abs(z) > 3)
+
+
+# 5. Gráficos
+
+# 5.1 Boxplot geral
+g_box_geral <- ggplot(vulva, aes(x = "", y = x)) +
+  geom_boxplot(fill = "grey85", width = 0.35, outlier.colour = "firebrick") +
+  stat_summary(fun = mean, geom = "point", 
+               size = 2, fill = "black", colour = "black") +
+  labs(
+    title = "Distribuição dos casos mensais",
+    y     = "Casos diagnosticados",
+    x     = NULL
+  ) +
+  tema_relatorio +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+# 5.2 Boxplot por ano
+g_box_ano <- ggplot(vulva, aes(x = factor(ano), y = x)) +
+  geom_boxplot(fill = "grey85", outlier.colour = "firebrick") +
+  stat_summary(fun = mean, geom = "point", 
+               size = 2, fill = "black", colour = "black") +
+  labs(
+    title = "Casos diagnosticados por ano",
+    x     = "Ano",
+    y     = "Casos diagnosticados"
+  ) +
+  tema_relatorio
+
+# 5.3 Boxplot por mês
+g_box_mes <- ggplot(vulva, aes(x = mes, y = x)) +
+  geom_boxplot(fill = "grey85", outlier.colour = "firebrick") +
+  stat_summary(fun = mean, geom = "point", 
+               size = 2, fill = "black", colour = "black") +
+  labs(
+    title = "Padrão sazonal dos casos diagnosticados",
+    x     = "Mês",
+    y     = "Casos diagnosticados"
+  ) +
+  tema_relatorio
+
+# 5.4 Série temporal com z-scores > |2| 
+
+
+g_box_geral
+g_box_ano
+g_box_mes
+
+# 6. Tabelas resumo com kable
+resumo <- tibble(
+  Estatística = c("n", "Média", "Mediana", "Moda", "Mínimo", "Máximo",
+                  "Amplitude", "Variância", "Desvio padrão", "CV (%)",
+                  "Classificação CV", "Q1", "Q3", "IQR"),
+  Valor = c(n, media, mediana, paste(moda, collapse = "; "),
+            min(x), max(x), amplitude, variancia, desvio, cv,
+            as.character(classif_cv),
+            quartis[1], quartis[3], iqr)
+) %>%
+  mutate(Valor = as.character(round(as.numeric(Valor), 2)))
+
+kable(resumo,
+      caption = "Síntese numérica dos casos mensais diagnosticados") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                position = "center")
+
+# Tabela CV por ano
+kable(cv_por_ano,
+      caption = "Coeficiente de variação por ano") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                position = "center")
+
+# Tabela de outliers
+kable(outliers_tukey,
+      caption = "Meses atípicos pelo critério de Tukey (boxplot)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                position = "center")
+```
+
+#### Visualização da série
+
+```{r}
+# Série temporal original
+vulva <- vulva %>%
+  mutate(
+    data = make_date(
+      year = floor(tempo), 
+      month = round((tempo - floor(tempo)) * 12) + 1, 
+      day = 1
+    )
+  )
+
+g_serie <- ggplot(vulva, aes(x = data, y = x)) +
+  geom_line(colour = "black", linewidth = 0.7) +
+  scale_x_date(
+    limits = as.Date(c("2015-01-01", "2025-12-31")),
+    breaks = seq(as.Date("2015-01-01"), as.Date("2024-12-31"), by = "6 months"),
+    date_labels = "%b/%Y"
+  ) +
+  labs(
+    title = "Série temporal dos casos mensais",
+    x     = "Tempo",
+    y     = "Casos diagnosticados"
+  ) +
+  tema_relatorio +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+g_serie
+
+# Visualização do padrão mensal por ano
+g_sazonal <- ggseasonplot(y, year.labels = FALSE, year.labels.left = FALSE) +
+  labs(
+    title = "Padrão sazonal dos casos mensais",
+    subtitle = "Comparação dos anos sobrepostos",
+    x = "Mês",
+    y = "Casos diagnosticados",
+    colour = "Ano"
+  ) +
+  tema_relatorio +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    linewidth = 0.8 
+  )
+
+g_sazonal
+
+# Decomposição clássica da série temporal
+dec <- decompose(y)
+vulva_dec <- tibble(
+  tempo      = as.numeric(time(y)),
+  Observado  = as.numeric(dec$x),
+  Tendência  = as.numeric(dec$trend),
+  Sazonal    = as.numeric(dec$seasonal),
+  Resíduo    = as.numeric(dec$random)
+) %>%
+  mutate(data = as.Date(sprintf("%d-%02d-01", 
+                                floor(tempo), 
+                                round((tempo - floor(tempo)) * 12) + 1)))
+
+criar_painel <- function(y_var, titulo, mostrar_y = TRUE) {
+  p <- ggplot(vulva_dec, aes(x = data, y = .data[[y_var]])) +
+    geom_line(colour = "steelblue", linewidth = 0.6, na.rm = TRUE) +
+    labs(title = titulo, x = NULL, y = NULL) +
+    tema_relatorio +
+    theme(
+      plot.title = element_text(size = 11, face = "bold"),
+      axis.text.y = if (mostrar_y) element_text(size = 8) else element_blank(),
+      axis.ticks.y = if (mostrar_y) element_line() else element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank()
+    )
+  if (y_var == "Resíduo") {
+    p <- p + theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+  } else {
+    p <- p + theme(axis.text.x = element_blank())
+  }
+  return(p)
+}
+
+p1 <- criar_painel("Observado", "Observado", mostrar_y = TRUE)
+p2 <- criar_painel("Tendência", "Tendência", mostrar_y = TRUE)
+p3 <- criar_painel("Sazonal",   "Sazonalidade", mostrar_y = TRUE)
+p4 <- criar_painel("Resíduo",   "Resíduo", mostrar_y = TRUE)
+
+g_decomposicao <- (p1 / p2 / p3 / p4) +
+  plot_layout(heights = c(1.5, 1.2, 1, 1)) +
+  plot_annotation(
+    title = "Decomposição clássica da série temporal",
+    subtitle = "Casos mensais diagnosticados",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 14),
+      plot.margin = margin(10, 10, 10, 10)
+    )
+  )
+
+g_decomposicao
+```
+
+#### Análises de autocorrelação (ACF) e autocorrelação parcial (PACF)
+
+```{r}
+criar_grafico_correlacao <- function(serie, tipo = "ACF", lag_max = 36) {
+  if (tipo == "ACF") {
+    obj <- Acf(serie, lag.max = lag_max, plot = FALSE)
+    titulo <- "Função de Autocorrelação (ACF)"
+    y_lab <- "Autocorrelação"
+  } else {
+    obj <- Pacf(serie, lag.max = lag_max, plot = FALSE)
+    titulo <- "Função de Autocorrelação Parcial (PACF)"
+    y_lab <- "Autocorrelação Parcial"
+  }
+  df <- data.frame(
+    lag = as.numeric(obj$lag),
+    acf = as.numeric(obj$acf)
+  ) %>% 
+    filter(lag > 0)
+  limite <- qnorm((1 + 0.95) / 2) / sqrt(length(serie))
+  ggplot(df, aes(x = lag, y = acf)) +
+    geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = -limite, ymax = limite),
+              fill = "white", alpha = 0.5) +
+    geom_hline(yintercept = 0, colour = "grey40") +
+    geom_segment(aes(xend = lag, yend = 0), colour = "steelblue", linewidth = 0.8) +
+    geom_hline(yintercept = c(-limite, limite), linetype = "dashed", colour = "firebrick") +
+    scale_x_continuous(breaks = seq(0, lag_max, by = 6)) +
+    labs(
+      title = titulo,
+      x = "Defasagem (Lags)",
+      y = y_lab
+    ) +
+    tema_relatorio +
+    theme(
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank()
+    )
+}
+
+g_acf  <- criar_grafico_correlacao(y, tipo = "ACF", lag_max = 36)
+g_pacf <- criar_grafico_correlacao(y, tipo = "PACF", lag_max = 36)
+
+g_acf
+g_pacf
+```
+
+#### Testes de estacionariedade
+
+```{r}
+# Testes na série original
+adf_orig   <- adf.test(y)
+kpss_orig  <- kpss.test(y)
+
+# Testes na série diferenciada
+adf_diff   <- adf.test(diff(y))
+kpss_diff  <- kpss.test(diff(y))
+
+# Número de diferenças necessárias
+n_dif  <- ndiffs(y)   # para estacionariedade (média)
+n_sdif <- nsdiffs(y)  # para sazonalidade
+
+# Função auxiliar para formatar p-valores muito pequenos
+format_p <- function(p) {
+  ifelse(p < 0.001, "< 0,001", format(round(p, 3), decimal.mark = ","))
+}
+
+# Criando a tabela
+tabela_testes <- tibble(
+  Série = c("Original", "Original", "Diferenciada", "Diferenciada"),
+  Teste = c("ADF", "KPSS", "ADF", "KPSS"),
+  Estatística = c(
+    round(adf_orig$statistic, 2),
+    round(kpss_orig$statistic, 2),
+    round(adf_diff$statistic, 2),
+    round(kpss_diff$statistic, 2)
+  ),
+  `p-valor` = c(
+    format_p(adf_orig$p.value),
+    format_p(kpss_orig$p.value),
+    format_p(adf_diff$p.value),
+    format_p(kpss_diff$p.value)
+  ),
+  Conclusão = c(
+    ifelse(adf_orig$p.value > 0.05, "Não estacionária", "Estacionária"),
+    ifelse(kpss_orig$p.value > 0.05, "Estacionária", "Não estacionária"),
+    ifelse(adf_diff$p.value > 0.05, "Não estacionária", "Estacionária"),
+    ifelse(kpss_diff$p.value > 0.05, "Estacionária", "Não estacionária")
+  )
+)
+
+# Formatando no kable
+kable(tabela_testes,
+      caption = "Testes de raiz unitária para a série temporal",
+      col.names = c("Série", "Teste", "Estatística", "p-valor", "Conclusão")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                position = "center") %>%
+  column_spec(5, bold = TRUE) # Deixa a coluna de conclusão em negrito
+
+tabela_difs <- tibble(
+  Tipo = c("Diferença simples (média)", "Diferença sazonal (variância)"),
+  Quantidade = c(n_dif, n_sdif)
+)
+
+kable(tabela_difs,
+      caption = "Número de diferenças recomendadas",
+      col.names = c("Tipo de diferença", "Quantidade (d)")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"),
+                full_width = FALSE,
+                position = "center")
+```
+
+## Referências bibliográfica:
+
+Sistema de Informação Ambulatorial (SIA), através do Boletim de Produção Ambulatorial Individualizado (BPA-I) e da Autorização de Procedimento de Alta Complexidade
+
+Sistema de Informação Hospitalar (SIH)
+
+Sistema de Informações de Câncer (SISCAN)
+
+Reis, E.A., Reis I.A. (2002) Análise Descritiva de Dados. Relatório Técnico do Departamento de Estatística da UFMG. Disponível em: www.est.ufmg.br
+
+Hyndman, R.J., Athanasopoulos, G. (2021) Forecasting: Principles and Practice, 3rd ed. OTexts. Disponível em: otexts.com/fpp3
+
+Claude: auxílio no código. DeepSeek: padronização da documentação.
