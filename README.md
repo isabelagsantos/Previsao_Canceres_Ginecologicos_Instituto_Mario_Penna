@@ -65,11 +65,9 @@ serie_casos_diagnostico_cancer_ginecologico_C51_a_C58_mensal_2015_2024_tratada.c
 .
 ├── README.md
 ├── dados/          # séries mensais tratadas (.csv)
-├── scripts/        # análises em R / R Markdown
+├── codigos/        # análises em R / R Markdown
 └── resultados/     # tabelas e gráficos gerados
 ```
-
-> Ajuste os nomes das pastas conforme a organização real do repositório.
 
 ## Pré-requisitos e pacotes
 
