@@ -1,0 +1,4 @@
+"Modelo";"RMSE";"MAE";"MAPE"
+"ARIMA(1,1,0)";3,02;1,79;Inf
+"ARIMA(0,1,1)";2,84;2,08;Inf
+"ARIMA(1,1,1)";2,84;2,08;Inf

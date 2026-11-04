@@ -1,0 +1,5 @@
+"Série";"Teste";"Estatística";"p-valor";"Conclusão"
+"Original";"ADF";-5,37;"0,01";"Estacionária"
+"Original";"KPSS";0,15;"0,1";"Estacionária"
+"Diferenciada";"ADF";-7,64;"0,01";"Estacionária"
+"Diferenciada";"KPSS";0,02;"0,1";"Estacionária"

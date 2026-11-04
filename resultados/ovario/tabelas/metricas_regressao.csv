@@ -1,0 +1,5 @@
+"Modelo";"RMSE";"MAE";"MAPE"
+"Linear";3,79;2,86;34,62
+"Quadrática";3,94;3,02;36,44
+"Linear + sazonal";3,79;2,75;32,34
+"Quadrática + sazonal";3,93;2,92;34,49

@@ -1,0 +1,4 @@
+"Teste";"H0";"Estatística";"p-valor";"Conclusão"
+"Ljung-Box";"Resíduos são ruído branco";37,762;0,0367;"Rejeita H0"
+"Shapiro-Wilk";"Resíduos têm distribuição normal";0,965;0,0124;"Rejeita H0"
+"Kolmogorov-Smirnov";"Resíduos têm distribuição normal";0,082;0,5055;"Não rejeita H0"

@@ -1,0 +1,5 @@
+"Modelo";"RMSE";"MAE";"MAPE"
+"MMS";2,86;2,15;Inf
+"SES";2,84;2,08;Inf
+"Holt";2,85;2,29;Inf
+"Holt-Winters";2,8;2,29;Inf

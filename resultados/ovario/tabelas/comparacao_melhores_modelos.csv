@@ -1,0 +1,4 @@
+"Grupo";"Modelo";"RMSE";"MAE";"MAPE"
+"Regressão";"Linear + sazonal";3,79;2,75;32,34
+"Suavização";"Holt-Winters";3,93;2,96;35,36
+"Box-Jenkins";"ARIMA(0,1,1)";4,22;3,32;39,71

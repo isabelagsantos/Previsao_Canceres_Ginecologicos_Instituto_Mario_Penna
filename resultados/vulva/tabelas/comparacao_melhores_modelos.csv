@@ -1,0 +1,4 @@
+"Grupo";"Modelo";"RMSE";"MAE";"MAPE"
+"Regressão";"Linear";1,49;1,15;Inf
+"Suavização";"Holt";1,49;1,08;Inf
+"Box-Jenkins";"ARIMA(1,1,0)";1,44;1,15;Inf

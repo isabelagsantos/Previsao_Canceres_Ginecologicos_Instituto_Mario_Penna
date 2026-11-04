@@ -1,0 +1,4 @@
+"Grupo";"Modelo";"RMSE";"MAE";"MAPE"
+"Regressão";"Quadrática";4,35;3,9;46,77
+"Suavização";"MMS";4,56;4,16;45,88
+"Box-Jenkins";"ARIMA(2,1,0) combinado";4,31;3,88;44,26
