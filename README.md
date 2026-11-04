@@ -111,14 +111,6 @@ install.packages(c("tidyverse", "knitr", "kableExtra",
 - ACF e PACF
 - Testes de estacionariedade (ADF e KPSS) nas séries original e diferenciada
 
-## Próximos passos
-
-- [ ] Replicar a análise exploratória para C52, C53, C54 e C56
-- [ ] Ajustar modelos de previsão (ex.: suavização exponencial, ARIMA/SARIMA)
-- [ ] Avaliar acurácia no conjunto de teste (RMSE, MAE, MAPE)
-- [ ] Gerar previsões futuras e intervalos de confiança
-- [ ] Redigir conclusões e discussão
-
 ## Fontes e referências
 
 - REIS, E. A.; REIS, I. A. (2002). *Análise Descritiva de Dados*. Relatório Técnico do Departamento de Estatística da UFMG. Disponível em: [www.est.ufmg.br](https://www.est.ufmg.br)
